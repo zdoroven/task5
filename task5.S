@@ -1,0 +1,128 @@
+.include "my-macro"
+
+.bss
+	.lcomm buf, 100		# Буфер для хранения прочитанных символов. Размер - 100 байт
+	.lcomm c, 1		# Буфер для чтения текущего символа. Размер - 1 байт
+
+.data
+	k: .long 7
+	l: .long 7          
+	massiv: .long 0,0,0,0,0,0     # Вектор для вывода (6 цифр и 5 пробелов)
+	# элемент вектора считается по формуле b(i) = A(k,i) + A(i,l)
+	# 	Двумерный массив 6 x 6
+
+	Smatrix:
+		.long 11,12,13,14,15,16
+		.long 21,22,23,24,25,26
+		.long 31,32,33,34,35,36
+		.long 41,42,43,44,45,46
+		.long 51,52,53,54,55,56
+		.long 61,62,63,64,65,66
+
+
+.text
+.global _start
+
+_start:
+	sub	%esi, %esi     # указатель адреса байта в буфере символов (индексный регистр)
+	Puts "Введите номер строки k"
+
+kbd_input:
+	Getchar $c          # макровызов ввода символа со стандартного ввода
+
+	cmpl $0, %eax 	# Конец файла - EOF (введено 0 символов) ?
+	je stop
+
+	cmpb $'\n', c 	# это символ перевода строки ?
+	je get_digit 	# ДА - на сохранение цифры в буфер
+
+	cmp $100, %esi 	# Проверка заполнения буфера
+	je overflow
+
+	cmpb $'6', c  		# код больше кода символа '6' ?
+	ja print_err_msg	# ДА - на вывод сообщения об ошибке
+	cmpb $'1', c		# код меньше кода символа '1' ?
+	jb print_err_msg 	# ДА - на вывод сообщения об ошибке
+
+
+	movb c, %al         # код из с пишем в al
+	movb %al, buf(%esi) # Загрузить содержимое al (введенный символ) в байт по адресу buf,  esi (буфер для вводимых символов)
+	incl %esi	    # указать на следующий адрес буфера для следующего символа
+
+	jmp kbd_input	    # на ввод следующего символа
+
+print_err_msg:
+	Puts "Введите цифру от 1 до 6"	# вывод сообщения об ошибке
+	jmp kbd_input 			# на ввод следующего символа
+
+overflow:
+	Puts "Буфер переполнен!"
+	jmp stop
+
+get_digit:
+	cmp $0, %esi		#сравниваем esi с 0
+	je kbd_input
+
+	decl %esi      		#уменьшаем esi на 1
+	sub %eax, %eax		#обнуляем eax
+	movb buf(%esi), %al	#помещаем в al значение из массива buf по адресу esi
+	sub $48, %eax		#уменьшаем eax на 48, чтобы получить цифру, а не код символа
+
+	cmpl $7, k              #Если еще не вводили k (сравнение с 7)
+	je move_to_k
+
+	jmp move_to_l
+
+move_to_k:
+	movl %eax, k   		# Записываем значение eax в k 
+	movb $0, buf   		# Обнуляем первый элемент массива buf
+	sub %esi, %esi 		# Обнуляем регистр для дальнейшего использования
+	Puts "Введите номер столбца l"
+	jmp kbd_input
+
+move_to_l:
+	movl %eax, l		# Записываем значение eax в k 	
+	movb $0, buf		# Обнуляем первый элемент массива buf
+	sub %esi, %esi		# Обнуляем регистр для дальнейшего использования
+	Puts "Строю вектор..."	
+	decl k 			# Отсчет с 0
+	decl l 			# Отсчет с 0
+
+get_k_i:
+	movl $24, %eax 		# Помещаем 24 в регистр
+	mov k, %ebx		# В ebx помещаем адрес строки
+	mul %ebx 		# Умножаем регистр на 24
+	
+	mov Smatrix(%eax,%esi,4), %eax # элемент (k,i) в рег.
+
+	jmp add_k_i
+
+get_i_l:
+	movl $24, %eax
+	mov %esi, %ebx
+	mul %ebx
+	
+	mov l, %ebx	               # l столбец матрицы
+	mov Smatrix(%eax,%ebx,4), %eax # элемент (i,l) в рег.
+
+	jmp add_i_l
+
+next:
+	incl %esi      		
+	cmpl $6, %esi
+	jb get_k_i
+	jmp stop
+
+add_k_i:
+	addl %eax, massiv(,%esi,4)
+	jmp get_i_l
+
+add_i_l:
+	addl %eax, massiv(,%esi,4)
+	jmp next
+
+stop:
+
+  Exit $0
+
+.end
